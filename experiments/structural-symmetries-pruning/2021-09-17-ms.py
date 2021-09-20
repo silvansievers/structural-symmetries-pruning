@@ -86,7 +86,7 @@ exp.add_report(
         ],
         attributes=attributes,
     ),
-    outfile=os.path.join(exp.eval_dir, exp.name+"compare.html")
+    outfile=os.path.join(exp.eval_dir, exp.name+"-compare.html")
 )
 
 exp.run_steps()
