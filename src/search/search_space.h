@@ -12,6 +12,9 @@ class OperatorProxy;
 class State;
 class TaskProxy;
 
+namespace utils {
+class LogProxy;
+}
 
 class SearchNode {
     State state;
@@ -42,7 +45,7 @@ public:
     void close();
     void mark_as_dead_end();
 
-    void dump(const TaskProxy &task_proxy) const;
+    void dump(const TaskProxy &task_proxy, utils::LogProxy &log) const;
 };
 
 
@@ -50,13 +53,14 @@ class SearchSpace {
     PerStateInformation<SearchNodeInfo> search_node_infos;
 
     StateRegistry &state_registry;
+    utils::LogProxy &log;
 
     void trace_path_with_symmetries(const State &goal_state,
                                     std::vector<OperatorID> &path,
                                     const std::shared_ptr<AbstractTask> &task,
                                     const std::shared_ptr<Group> &group) const;
 public:
-    explicit SearchSpace(StateRegistry &state_registry);
+    SearchSpace(StateRegistry &state_registry, utils::LogProxy &log);
 
     SearchNode get_node(const State &state);
     void trace_path(const State &goal_state,
