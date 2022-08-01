@@ -4,6 +4,7 @@
 #include "landmark_cost_assignment.h"
 #include "landmark_factory.h"
 #include "landmark_status_manager.h"
+#include "util.h"
 
 #include "../option_parser.h"
 #include "../per_state_bitset.h"
@@ -38,7 +39,9 @@ LandmarkCountHeuristic::LandmarkCountHeuristic(const options::Options &opts)
           (!task_properties::has_axioms(task_proxy) &&
            (!task_properties::has_conditional_effects(task_proxy) || conditional_effects_supported))),
       successor_generator(nullptr) {
-    utils::g_log << "Initializing landmark count heuristic..." << endl;
+    if (log.is_at_least_normal()) {
+        log << "Initializing landmark count heuristic..." << endl;
+    }
 
     /*
       Actually, we should like to test if this is the root task or a
@@ -54,7 +57,9 @@ LandmarkCountHeuristic::LandmarkCountHeuristic(const options::Options &opts)
     }
 
     utils::Timer lm_graph_timer;
-    utils::g_log << "Generating landmark graph..." << endl;
+    if (log.is_at_least_normal()) {
+        log << "Generating landmark graph..." << endl;
+    }
     shared_ptr<LandmarkFactory> lm_graph_factory = opts.get<shared_ptr<LandmarkFactory>>("lm_factory");
 
     if (admissible) {
@@ -72,13 +77,16 @@ LandmarkCountHeuristic::LandmarkCountHeuristic(const options::Options &opts)
     }
 
     lgraph = lm_graph_factory->compute_lm_graph(task);
-    utils::g_log << "Landmark graph generation time: " << lm_graph_timer << endl;
-    utils::g_log << "Landmark graph contains " << lgraph->get_num_landmarks()
-                 << " landmarks, of which " << lgraph->get_num_disjunctive_landmarks()
-                 << " are disjunctive and " << lgraph->get_num_conjunctive_landmarks()
-                 << " are conjunctive." << endl;
-    utils::g_log << "Landmark graph contains " << lgraph->get_num_edges()
-                 << " orderings." << endl;
+    assert(lm_graph_factory->achievers_are_calculated());
+    if (log.is_at_least_normal()) {
+        log << "Landmark graph generation time: " << lm_graph_timer << endl;
+        log << "Landmark graph contains " << lgraph->get_num_landmarks()
+            << " landmarks, of which " << lgraph->get_num_disjunctive_landmarks()
+            << " are disjunctive and " << lgraph->get_num_conjunctive_landmarks()
+            << " are conjunctive." << endl;
+        log << "Landmark graph contains " << lgraph->get_num_edges()
+            << " orderings." << endl;
+    }
     lm_status_manager = utils::make_unique_ptr<LandmarkStatusManager>(*lgraph);
 
     if (admissible) {
@@ -93,12 +101,55 @@ LandmarkCountHeuristic::LandmarkCountHeuristic(const options::Options &opts)
         }
     } else {
         lm_cost_assignment = nullptr;
+        compute_landmark_costs();
     }
 
     if (use_preferred_operators) {
         /* Ideally, we should reuse the successor generator of the main task in cases
            where it's compatible. See issue564. */
         successor_generator = utils::make_unique_ptr<successor_generator::SuccessorGenerator>(task_proxy);
+    }
+}
+
+int LandmarkCountHeuristic::get_min_cost_of_achievers(const set<int> &achievers,
+                                                      const TaskProxy &task_proxy) {
+    int min_cost = numeric_limits<int>::max();
+    for (int id : achievers) {
+        OperatorProxy op = get_operator_or_axiom(task_proxy, id);
+        min_cost = min(min_cost, op.get_cost());
+    }
+    return min_cost;
+}
+
+void LandmarkCountHeuristic::compute_landmark_costs() {
+    /*
+       This function runs under the assumption that landmark node IDs go
+       from 0 to the number of landmarks - 1, therefore the entry in
+       *min_first_achiever_costs* and *min_possible_achiever_costs*
+       at index i corresponds to the entry for the landmark node with ID i.
+    */
+
+    /*
+       For derived landmarks, we overapproximate that all operators are achievers.
+       Since we do not want to explicitly store all operators in the achiever
+       vector, we instead just compute the minimum cost over all operators and
+       use this cost for all derived landmarks.
+    */
+    int min_operator_cost = task_properties::get_min_operator_cost(task_proxy);
+    min_first_achiever_costs.reserve(lgraph->get_num_landmarks());
+    min_possible_achiever_costs.reserve(lgraph->get_num_landmarks());
+    for (auto &node : lgraph->get_nodes()) {
+        if (node->get_landmark().is_derived) {
+            min_first_achiever_costs.push_back(min_operator_cost);
+            min_possible_achiever_costs.push_back(min_operator_cost);
+        } else {
+            int min_first_achiever_cost = get_min_cost_of_achievers(
+                node->get_landmark().first_achievers, task_proxy);
+            min_first_achiever_costs.push_back(min_first_achiever_cost);
+            int min_possible_achiever_cost = get_min_cost_of_achievers(
+                node->get_landmark().possible_achievers, task_proxy);
+            min_possible_achiever_costs.push_back(min_possible_achiever_cost);
+        }
     }
 }
 
@@ -112,23 +163,27 @@ int LandmarkCountHeuristic::get_heuristic_value(const State &ancestor_state) {
     // must return 0 for a goal state.
 
     lm_status_manager->update_lm_status(ancestor_state);
-    if (lm_status_manager->dead_end_exists()) {
-        return DEAD_END;
-    }
 
     if (admissible) {
         double h_val = lm_cost_assignment->cost_sharing_h_value(
             *lm_status_manager);
-        return static_cast<int>(ceil(h_val - epsilon));
+        if (h_val == numeric_limits<double>::max()) {
+            return DEAD_END;
+        } else {
+            return static_cast<int>(ceil(h_val - epsilon));
+        }
     } else {
         int h = 0;
         for (int id = 0; id < lgraph->get_num_landmarks(); ++id) {
-            landmark_status status =
-                lm_status_manager->get_landmark_status(id);
-            if (status == lm_not_reached || status == lm_needed_again) {
-                int cost = lgraph->get_node(id)->get_landmark().cost;
-                assert(cost < numeric_limits<int>::max());
-                h += cost;
+            landmark_status status = lm_status_manager->get_landmark_status(id);
+            if (status == lm_not_reached) {
+                if (min_first_achiever_costs[id] == numeric_limits<int>::max())
+                    return DEAD_END;
+                h += min_first_achiever_costs[id];
+            } else if (status == lm_needed_again) {
+                if (min_possible_achiever_costs[id] == numeric_limits<int>::max())
+                    return DEAD_END;
+                h += min_possible_achiever_costs[id];
             }
         }
         return h;
@@ -225,12 +280,12 @@ bool LandmarkCountHeuristic::landmark_is_interesting(
 }
 
 void LandmarkCountHeuristic::notify_initial_state(const State &initial_state) {
-    lm_status_manager->set_landmarks_for_initial_state(initial_state);
+    lm_status_manager->process_initial_state(initial_state, log);
 }
 
 void LandmarkCountHeuristic::notify_state_transition(
     const State &parent_state, OperatorID op_id, const State &state) {
-    lm_status_manager->update_reached_lms(parent_state, op_id, state);
+    lm_status_manager->process_state_transition(parent_state, op_id, state);
     if (cache_evaluator_values) {
         /* TODO:  It may be more efficient to check that the reached landmark
            set has actually changed and only then mark the h value as dirty. */
@@ -370,6 +425,16 @@ static shared_ptr<Heuristic> _parse(OptionParser &parser) {
     parser.add_option<bool>("alm", "use action landmarks", "true");
     lp::add_lp_solver_option_to_parser(parser);
     Heuristic::add_options_to_parser(parser);
+
+    parser.document_note("Note on performance for satisficing planning",
+                         "The cost of a landmark is based on the cost of the "
+                         "operators that achieve it. For satisficing search "
+                         "this can be counterproductive since it is often "
+                         "better to focus on distance from goal "
+                         "(i.e. length of the plan) rather than cost."
+                         "In experiments we achieved the best performance using"
+                         "the option 'transform=adapt_costs(one)' to enforce "
+                         "unit costs.");
     Options opts = parser.parse();
 
     if (parser.dry_run())

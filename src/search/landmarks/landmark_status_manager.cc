@@ -12,17 +12,23 @@ namespace landmarks {
   computing new landmark information.
 */
 LandmarkStatusManager::LandmarkStatusManager(LandmarkGraph &graph)
-    : reached_lms(vector<bool>(graph.get_num_landmarks(), true)),
-      lm_status(graph.get_num_landmarks(), lm_not_reached),
-      lm_graph(graph) {
+    : lm_graph(graph),
+      reached_lms(vector<bool>(graph.get_num_landmarks(), true)),
+      lm_status(graph.get_num_landmarks(), lm_not_reached) {
 }
 
 BitsetView LandmarkStatusManager::get_reached_landmarks(const State &state) {
     return reached_lms[state];
 }
 
-void LandmarkStatusManager::set_landmarks_for_initial_state(
-    const State &initial_state) {
+void LandmarkStatusManager::process_initial_state(
+    const State &initial_state, utils::LogProxy &log) {
+    set_reached_landmarks_for_initial_state(initial_state, log);
+    update_lm_status(initial_state);
+}
+
+void LandmarkStatusManager::set_reached_landmarks_for_initial_state(
+    const State &initial_state, utils::LogProxy &log) {
     BitsetView reached = get_reached_landmarks(initial_state);
     // This is necessary since the default is "true for all" (see comment above).
     reached.reset();
@@ -60,13 +66,15 @@ void LandmarkStatusManager::set_landmarks_for_initial_state(
             }
         }
     }
-    utils::g_log << inserted << " initial landmarks, "
-                 << num_goal_lms << " goal landmarks" << endl;
+    if (log.is_at_least_normal()) {
+        log << inserted << " initial landmarks, "
+            << num_goal_lms << " goal landmarks" << endl;
+    }
 }
 
-bool LandmarkStatusManager::update_reached_lms(const State &parent_ancestor_state,
-                                               OperatorID,
-                                               const State &ancestor_state) {
+bool LandmarkStatusManager::process_state_transition(
+    const State &parent_ancestor_state, OperatorID,
+    const State &ancestor_state) {
     if (ancestor_state == parent_ancestor_state) {
         // This can happen, e.g., in Satellite-01.
         return false;
@@ -111,7 +119,7 @@ void LandmarkStatusManager::update_lm_status(const State &ancestor_state) {
     const BitsetView reached = get_reached_landmarks(ancestor_state);
 
     const int num_landmarks = lm_graph.get_num_landmarks();
-    /* This first loop is necessary as setup for the *needed again*
+    /* This first loop is necessary as setup for the needed-again
        check in the second loop. */
     for (int id = 0; id < num_landmarks; ++id) {
         lm_status[id] = reached.test(id) ? lm_reached : lm_not_reached;
@@ -122,36 +130,6 @@ void LandmarkStatusManager::update_lm_status(const State &ancestor_state) {
             lm_status[id] = lm_needed_again;
         }
     }
-}
-
-bool LandmarkStatusManager::dead_end_exists() {
-    for (auto &node : lm_graph.get_nodes()) {
-        int id = node->get_id();
-
-        /*
-          This dead-end detection works for the following case:
-          X is a goal, it is true in the initial state, and has no achievers.
-          Some action A has X as a delete effect. Then using this,
-          we can detect that applying A leads to a dead-end.
-
-          Note: this only tests for reachability of the landmark from the initial state.
-          A (possibly) more effective option would be to test reachability of the landmark
-          from the current state.
-        */
-
-        const Landmark &landmark = node->get_landmark();
-        if (!landmark.is_derived) {
-            if ((lm_status[id] == lm_not_reached) &&
-                landmark.first_achievers.empty()) {
-                return true;
-            }
-            if ((lm_status[id] == lm_needed_again) &&
-                landmark.possible_achievers.empty()) {
-                return true;
-            }
-        }
-    }
-    return false;
 }
 
 bool LandmarkStatusManager::landmark_needed_again(

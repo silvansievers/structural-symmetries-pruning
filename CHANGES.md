@@ -9,6 +9,93 @@ For more details, check the repository history
 (<https://issues.fast-downward.org>). Repository branches are named
 after the corresponding tracker issues.
 
+## Changes since the last release
+
+- search and pruning module, for users: Fix performance regression
+  introduced in issue1042 due to always measuring time spent in
+  pruning methods. This is now only done in verbose verbosity level.
+  To this end, the verbosity parameter was added to the pruning module.
+  <https://issues.fast-downward.org/issue1058>
+
+- landmarks: Landmark costs for lmcount in the inadmissible settings are now
+  always based on the cost of their achievers, and the cost for derived
+  landmarks can now be set with a new option 'derived_lm_cost' (either 0 or 1,
+  with 1 being the default).
+  When using lmcount in satisficing search where we do not care about cost,
+  experiments show that using 'transform=adapt_costs(ONE)' and
+  'derived_lm_cost=1' performs best, since a plan is usually found faster if we
+  focus on its length rather than its cost.
+  <https://issues.fast-downward.org/issue1009>
+
+- driver, for developers: skip __pycache__ directory when collection portfolio
+  aliases
+  <https://issues.fast-downward.org/issue1055>
+
+- pruning module, for developers: we cleaned up the internal structure of
+  stubborn set pruning.
+  <https://issues.fast-downward.org/issue1059>
+
+## Fast Downward 22.06
+
+Released on June 16, 2022.
+
+Highlights:
+
+- We fixed a bug in the translator component that could lead to
+  incorrect behavior in tasks where predicates are mentioned in the
+  goal that are not modified by any actions.
+
+- Various speed improvements to landmark factories. This is part of a
+  larger ongoing clean-up of the landmark code.
+
+- More informative output, and more control over the output. The
+  driver now prints the total runtime of all components. For many
+  planner components, including all heuristics, the verbosity level
+  can now be configured individually.
+
+Details:
+
+- translator: Fix a bug where the translator would not check goal
+  conditions on predicates that are not modified by actions.
+  <https://issues.fast-downward.org/issue1055>
+
+- driver: Print overall planner resource limits and overall planner
+  runtime on Linux and macOS systems.
+  <https://issues.fast-downward.org/issue1056>
+
+- logging: verbosity option for all evaluators
+  <https://issues.fast-downward.org/issue921>
+  All evaluators and heuristics now have their own configurable logger
+  and no longer use g_log. These loggers have a verbosity option,
+  which allows choosing between silent, normal, verbose and debug for
+  all instances of evaluators created on the command line.
+
+- landmarks: Speed up landmark generation time by 10-20% for `lm_rhw`,
+  `lm_zg`, and `lm_exhaust` by avoiding unnecessary computations in
+  the landmark exploration.
+  <https://issues.fast-downward.org/issue1044>
+
+- landmarks: Speed up landmark generation time by 5-15% for `lm_rhw`,
+  `lm_zg`, and `lm_exhaust` by computing reachability in the landmark
+  exploration as boolean information instead of (unused) integer
+  cost/level information.
+  <https://issues.fast-downward.org/issue1045>
+
+- landmarks: Improve landmark dead-end detection so that relevant
+  static information is only computed once, instead of at every state
+  evaluation.
+  <https://issues.fast-downward.org/issue1049>
+
+- infrastructure: Upgrade GitHub Actions to Windows Server 2019
+  (Visual Studio Enterprise 2019) and Windows Server 2022 (Visual
+  Studio Enterprise 2022). Remove Windows Server 2016, because GitHub
+  Actions no longer support it.
+  <https://issues.fast-downward.org/issue1054>
+
+- infrastructure: Run GitHub Actions only for the following branches:
+  `main`, `issue*`, `release-*`.
+  <https://issues.fast-downward.org/issue1027>
+
 ## Fast Downward 21.12
 
 Released on February 16, 2022.
@@ -52,9 +139,9 @@ Highlights:
   planner are planned. This is part of a general effort to make
   logging more configurable.
 
-- For developers: the internal representation of states has been
+- For developers: The internal representation of states has been
   overhauled, resolving the confusion between the previous classes
-  GlobalState and State.
+  `GlobalState` and `State`.
 
 Details:
 
@@ -66,8 +153,8 @@ Details:
   alternative suggestions including the ever so popular "truck falling
   down the hill" logo.
 
-- fast-downward.py main script: the script now automatically finds domain
-  files <taskfile>-domain.<ext> for task files called <taskfile>.<ext>
+- fast-downward.py main script: The script now automatically finds domain
+  files `<taskfile>-domain.<ext>` for task files called `<taskfile>.<ext>`
   <https://issues.fast-downward.org/issue1033>
 
 - pdbs: Integrate the Rovner et al. pattern generation methods based
@@ -115,7 +202,7 @@ Details:
   against using this feature when running experiments.
 
 - LP/IP, for developers: Debug builds with LP solvers vs. the
-  `_GLIBCXX_DEBUG` flag
+  `_GLIBCXX_DEBUG` flag.
   <https://issues.fast-downward.org/issue982>
   Previously, we used the flag `_GLIBCXX_DEBUG` in debug builds for
   additional checks. This makes the binary incompatible with external
@@ -127,7 +214,7 @@ Details:
 
 - pruning: New `LimitedPruning` class replaces previous limitation
   options of individual pruning methods.
-  <http://issues.fast-downward.org/issue1042>
+  <https://issues.fast-downward.org/issue1042>
   For example, the old command line
   `--search "astar(lmcut(),pruning=atom_centric_stubborn_sets(min_required_pruning_ratio=0.2,expansions_before_checking_pruning_ratio=1000))"`
   is now expressed as
@@ -224,7 +311,7 @@ Details:
   We unified the classes `GlobalState` and `State` into a new class
   also called `State`. This removed a lot of code duplication and hacks
   from the code. A description of the new class can be found in the wiki:
-  <https://www.fast-downward.org/ForDevelopers/Blog/A%20Deeper%20Look%20at%20States>
+  <https://www.fast-downward.org/ForDevelopers/Blog/ADeeperLookAtStates>
 
 - for developers: Change public interface of generation of random ints and
   doubles in the `RandomNumberGenerator` class.
