@@ -80,6 +80,31 @@ exp.add_absolute_report_step(
     attributes=attributes,
 )
 
-exp.add_comparison_table_step(attributes=attributes)
+exp.add_fetcher(
+    'data/2021-03-22-lmcut-oss-dks-eval',
+    filter_algorithm=[
+        '{}-lmcut-dks'.format(OLD_REV),
+        '{}-lmcut-oss'.format(OLD_REV),
+        '{}-lmcut-dks-stabinit'.format(OLD_REV),
+        '{}-lmcut-oss-stabinit'.format(OLD_REV),
+    ],
+    merge=True
+)
+
+exp.add_comparison_table_step(revisions=[OLD_REV, NEW_REV], attributes=attributes, name='compare-old')
+
+MIDDLE_REV='64096ee5c7f1c732ef544312233fbeae594df395'
+exp.add_fetcher(
+    'data/2022-05-04-fd2112-lmcut-oss-dks-eval',
+    filter_algorithm=[
+        '{}-lmcut-dks'.format(MIDDLE_REV),
+        '{}-lmcut-oss'.format(MIDDLE_REV),
+        '{}-lmcut-dks-stabinit'.format(MIDDLE_REV),
+        '{}-lmcut-oss-stabinit'.format(MIDDLE_REV),
+    ],
+    merge=True
+)
+
+exp.add_comparison_table_step(revisions=[MIDDLE_REV, NEW_REV], attributes=attributes, name='compare-previous')
 
 exp.run_steps()
