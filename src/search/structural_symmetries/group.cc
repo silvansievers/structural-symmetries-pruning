@@ -3,11 +3,12 @@
 #include "graph_creator.h"
 #include "permutation.h"
 
-#include "../option_parser.h"
 #include "../per_state_information.h"
-#include "../plugin.h"
 #include "../state_registry.h"
 #include "../task_proxy.h"
+
+#include "../plugins/options.h"
+#include "../plugins/plugin.h"
 #include "../utils/memory.h"
 #include "../tasks/root_task.h"
 
@@ -21,7 +22,7 @@
 using namespace std;
 using namespace utils;
 
-Group::Group(const options::Options &opts)
+Group::Group(const plugins::Options &opts)
     : stabilize_initial_state(opts.get<bool>("stabilize_initial_state")),
       stabilize_goal(opts.get<bool>("stabilize_goal")),
       use_color_for_stabilizing_goal(opts.get<bool>("use_color_for_stabilizing_goal")),
@@ -340,66 +341,66 @@ int Group::get_index_by_var_val_pair(const int var, const int val) const {
     return dom_sum_by_var[var] + val;
 }
 
-
-static shared_ptr<Group> _parse(OptionParser &parser) {
-    // General Bliss options and options for GraphCreator
-    parser.add_option<int>("time_bound",
-                           "Stopping after the Bliss software reached the time bound",
-                           "0");
-    parser.add_option<bool>("stabilize_initial_state",
-                            "Compute symmetries stabilizing the initial state",
-                            "false");
-    parser.add_option<bool>("stabilize_goal",
-                            "Compute symmetries stabilizing the goal",
-                            "true");
-    parser.add_option<bool>("use_color_for_stabilizing_goal",
-                            "Use a color to stabilize the goal instead of "
-                            "using an additional node linked to goal values.",
-                            "true");
-    parser.add_option<bool>("dump_symmetry_graph",
-                           "Dump symmetry graph in dot format",
-                           "false");
-
-    // Type of search symmetries to be used
-    vector<string> search_symmetries;
-    search_symmetries.push_back("NONE");
-    search_symmetries.push_back("OSS");
-    search_symmetries.push_back("DKS");
-    parser.add_enum_option<SearchSymmetries>("search_symmetries",
-                           search_symmetries,
-                           "Choose the type of structural symmetries that "
-                           "should be used for pruning: OSS for orbit space "
-                           "search or DKS for storing the canonical "
-                           "representative of every state during search",
-                           "NONE");
-
-    parser.add_option<bool>("dump_permutations",
-                           "Dump the generators",
-                           "false");
-    parser.add_option<bool>(
-        "write_search_generators",
-        "Write symmetry group generators that affect variables to a file and "
-        "stop afterwards.",
-        "false");
-    parser.add_option<bool>(
-        "write_all_generators",
-        "Write all symmetry group generators to a file, including those that "
-        "do not affect variables, and stop afterwards.",
-        "false");
-
-    Options opts = parser.parse();
-
-    if (parser.dry_run()) {
-        return nullptr;
-    } else {
-        return make_shared<Group>(opts);
+static class GroupCategoryPlugin : public plugins::TypedCategoryPlugin<Group> {
+public:
+    GroupCategoryPlugin() : TypedCategoryPlugin("Group") {
+        // TODO: Replace add synopsis for the wiki page.
+        // document_synopsis("...");
     }
 }
+_category_plugin;
 
-static PluginTypePlugin<Group> _type_plugin(
-    "Group",
-    // TODO: Replace empty string by synopsis for the wiki page.
-    "",
-    "symmetries");
+class GroupFeature : public plugins::TypedFeature<Group, Group> {
+public:
+    GroupFeature() : TypedFeature("structural_symmetries") {
+        document_title("Group");
+        document_synopsis("");
+        // General Bliss options and options for GraphCreator
+        add_option<int>("time_bound",
+                               "Stopping after the Bliss software reached the time bound",
+                               "0");
+        add_option<bool>("stabilize_initial_state",
+                                "Compute symmetries stabilizing the initial state",
+                                "false");
+        add_option<bool>("stabilize_goal",
+                                "Compute symmetries stabilizing the goal",
+                                "true");
+        add_option<bool>("use_color_for_stabilizing_goal",
+                                "Use a color to stabilize the goal instead of "
+                                "using an additional node linked to goal values.",
+                                "true");
+        add_option<bool>("dump_symmetry_graph",
+                                "Dump symmetry graph in dot format",
+                                "false");
 
-static Plugin<Group> _plugin("structural_symmetries", _parse);
+        // Type of search symmetries to be used
+        add_option<SearchSymmetries>("search_symmetries",
+                                                 "Choose the type of structural symmetries that "
+                                                 "should be used for pruning: OSS for orbit space "
+                                                 "search or DKS for storing the canonical "
+                                                 "representative of every state during search",
+                                                 "NONE");
+
+        add_option<bool>("dump_permutations",
+                                "Dump the generators",
+                                "false");
+        add_option<bool>(
+            "write_search_generators",
+            "Write symmetry group generators that affect variables to a file and "
+            "stop afterwards.",
+            "false");
+        add_option<bool>(
+            "write_all_generators",
+            "Write all symmetry group generators to a file, including those that "
+            "do not affect variables, and stop afterwards.",
+            "false");
+    }
+};
+
+static plugins::FeaturePlugin<GroupFeature> _plugin;
+
+static plugins::TypedEnumPlugin<SearchSymmetries> _enum_search_symmetries_plugin({
+    {"NONE", ""},
+    {"OSS", ""},
+    {"DKS", ""},
+});

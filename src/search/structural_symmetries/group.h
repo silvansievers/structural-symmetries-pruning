@@ -10,7 +10,7 @@ class State;
 class StateRegistry;
 class TaskProxy;
 
-namespace options {
+namespace plugins {
 class Options;
 }
 
@@ -57,7 +57,7 @@ class Group {
     void write_generators() const;
     void add_to_be_written_generator(const unsigned int *generator);
 public:
-    explicit Group(const options::Options &opts);
+    explicit Group(const plugins::Options &opts);
     ~Group() = default;
 
     // Graph creator
